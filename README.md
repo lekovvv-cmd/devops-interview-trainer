@@ -37,13 +37,19 @@ E2E-тесты самостоятельно собирают production-верс
 
 Готовность урока рассчитывается по результатам квиза, самооценке интервью, карточкам, успешно завершённым лабораториям и ручной отметке урока. Ручная отметка имеет вес 10%, поэтому сама по себе не создаёт ложную готовность. Все показатели ограничены диапазоном 0–100%.
 
+Лаборатория записывается только после подтверждённого решения текущей сессии. Повторные прохождения увеличивают `attempts`, а хранится лучший результат: более высокий score или, при равном score, вариант с меньшим числом подсказок.
+
 ## Безопасный терминал
 
 Это не shell и не контейнер. В коде нет `eval`, `exec` и запуска команд операционной системы.
 
-Поддерживаемые Linux-команды в модели: `ls`, `stat`, `cat`, `chmod`, `chown`, `ps`, `pgrep`, `top`, `kill`, `systemctl`, `journalctl`, `df`, `du`, `lsof +L1`, `ss`, `curl`, `ip`, `dig` и ограниченный `trainer edit /etc/app/app.env BIND_ADDRESS=0.0.0.0`.
+Поддерживаемые Linux-команды в модели: `ls`, `stat`, `cat`, `sudo -u <root|app> cat`, `chmod`, `chown`, `ps`, `pgrep`, `top`, `kill`, `systemctl`, `journalctl`, `df`, `du`, `lsof +L1`, `ss`, `curl`, `ip`, `dig` и ограниченный `trainer edit /etc/app/app.env BIND_ADDRESS=0.0.0.0`.
 
-Поддерживаемые Kubernetes-команды: `kubectl get`, `describe`, `logs`, `logs --previous`, `set image`, `set resources`, `rollout status/history/undo` и безопасно заблокированный `delete pod`.
+Linux-модель знает пользователей `student` (обычный ввод), `app` (сервис) и `root`, их UID/GID и права каждого каталога пути. Для permission-сценария безопасны, в частности, `app:app 600`, `app:app 640` и `root:app 640`; world/group-writable режимы не являются исправлением.
+
+Поддерживаемые Kubernetes-команды: `kubectl get`, `describe`, `logs`, `logs --previous`, `set image`, `set resources`, `rollout status/history/undo` и безопасно заблокированный `delete pod`. Namespace поддерживается как `-n production`, `--namespace production`, `--namespace=production`, перед или после verb.
+
+Kubernetes-состояние типизировано: Deployment, Pod, container state, resources, readiness и endpoints синхронизируются после каждого допустимого изменения. Симулятор проверяет resource/name/container/image/namespace и не меняет состояние на неверной команде.
 
 Симулятор намеренно реализует только команды и объекты, нужные сценариям. Не стоит использовать его как справочник полной POSIX-shell или Kubernetes CLI.
 
@@ -56,7 +62,11 @@ E2E-тесты самостоятельно собирают production-верс
 3. безопасное исправление после диагностики;
 4. повторная проверка результата.
 
-Опасные действия (`chmod 777`, `kill -9` до SIGTERM, удаление Pod до логов, reboot и т. п.) не засчитываются как решение и снижают оценку.
+Опасные действия (`chmod 777`, `kill -9` до SIGTERM, удаление Pod до логов, reboot и т. п.) не засчитываются как решение и снижают оценку. `SIGKILL` до попытки `SIGTERM` блокирует текущую process-лабораторию: требуется reset, и такой путь не записывается в прогресс.
+
+## CI
+
+GitHub Actions запускается на `push` и `pull_request` с фиксированными Node.js 22.14.0 и pnpm 9.15.4. Workflow выполняет frozen install, lint, typecheck, unit tests, build и Playwright Chromium.
 
 ## Структура
 

@@ -91,6 +91,7 @@ export interface ScenarioScore {
   verified: boolean
   usedHints: number
   dangerousActions: number
+  resolutionBlocked: boolean
   completedDiagnostics: string[]
   isResolved: boolean
 }

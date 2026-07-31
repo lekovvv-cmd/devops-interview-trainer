@@ -47,7 +47,7 @@ export class ScenarioEngine {
     const foundCause = symptomRatio === 1 && diagnosticRatio === 1
     const verified = this.resolutionAfterCause && verificationRatio === 1
     const score = clamp(Math.round(symptomRatio * 15 + diagnosticRatio * 35 + (this.resolutionAfterCause ? 30 : 0) + verificationRatio * 20 - this.hintCount * 5 - this.dangerousCount * 20 - this.prematureResolutionCount * 10 - Math.min(this.uselessCount, 5) * 2))
-    return { score, foundCause, verified, usedHints: this.hintCount, dangerousActions: this.dangerousCount, completedDiagnostics: [...this.symptoms, ...this.diagnostics], isResolved: foundCause && this.resolutionAfterCause && verified && !this.resolutionBlocked }
+    return { score, foundCause, verified, usedHints: this.hintCount, dangerousActions: this.dangerousCount, resolutionBlocked: this.resolutionBlocked, completedDiagnostics: [...this.symptoms, ...this.diagnostics], isResolved: foundCause && this.resolutionAfterCause && verified && !this.resolutionBlocked }
   }
 
   reset(): void { this.symptoms.clear(); this.diagnostics.clear(); this.verifications.clear(); this.hintCount = 0; this.dangerousCount = 0; this.uselessCount = 0; this.resolutionBlocked = false; this.resolutionAfterCause = false; this.prematureResolutionCount = 0; this.actions.splice(0) }
