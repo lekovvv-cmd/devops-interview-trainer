@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseCommand } from './commandParser'
+import { commandsEquivalent, matchesAcceptedCommand, normalizedCommand, parseCommand } from './commandParser'
 
 describe('parseCommand', () => {
   it('extracts a command, flags and positional arguments', () => {
@@ -12,5 +12,22 @@ describe('parseCommand', () => {
 
   it('returns an empty command for whitespace', () => {
     expect(parseCommand('   ')).toEqual({ raw: '', command: '', args: [], flags: [] })
+  })
+
+  it('normalizes signal aliases and whitespace without accepting another command', () => {
+    expect(commandsEquivalent(' kill   -TERM 3912 ', 'kill -15 3912')).toBe(true)
+    expect(commandsEquivalent('kill -KILL 3912', 'kill -TERM 3912')).toBe(false)
+  })
+
+  it('normalizes Kubernetes resource aliases, namespace flags and independent flag order', () => {
+    expect(commandsEquivalent('kubectl describe po api-7d8f --namespace production', 'kubectl describe pod api-7d8f -n production')).toBe(true)
+    expect(commandsEquivalent('kubectl logs -n production web-6d7c9f6b7d-2xk9m --previous', 'kubectl logs web-6d7c9f6b7d-2xk9m --previous -n production')).toBe(true)
+  })
+
+  it('checks command questions semantically, including the required object and namespace', () => {
+    expect(matchesAcceptedCommand('kubectl get po -n production', ['kubectl get pods --namespace production'])).toBe(true)
+    expect(matchesAcceptedCommand('kubectl get pods -n staging', ['kubectl get pods -n production'])).toBe(false)
+    expect(matchesAcceptedCommand('kubectl get deployments -n production', ['kubectl get pods -n production'])).toBe(false)
+    expect(normalizedCommand('kill -SIGTERM 3912')).toContain('"signal":"TERM"')
   })
 })

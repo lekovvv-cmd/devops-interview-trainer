@@ -2,37 +2,72 @@ import { describe, expect, it } from 'vitest'
 import { scenarios } from '../../data/scenarios'
 import { SafeLabSession } from '.'
 
-describe('safe lab session', () => {
-  it('accepts Linux diagnostics in a flexible order and resolves the disk scenario', () => {
-    const scenario = scenarios.find((item) => item.id === 'linux-disk-full')!
-    const session = new SafeLabSession(scenario)
-    session.execute('lsof +L1')
-    session.execute('du -xhd1 /var')
-    session.execute('df -h /var')
-    const { score } = session.execute('systemctl restart nginx')
+function sessionFor(id: string): SafeLabSession {
+  const scenario = scenarios.find((item) => item.id === id)
+  if (!scenario) throw new Error(`Scenario ${id} is missing`)
+  return new SafeLabSession(scenario)
+}
 
-    expect(score.foundCause).toBe(true)
+function run(session: SafeLabSession, commands: string[]) {
+  for (const command of commands) session.execute(command)
+  return session.evaluator.getScore()
+}
+
+describe('ScenarioEngine', () => {
+  it('records an inspectable ordered action journal and requires the full Linux permission path', () => {
+    const session = sessionFor('linux-permission')
+    const score = run(session, [
+      'systemctl status app-worker',
+      'stat /srv/app/config.yml',
+      'chown app:app /srv/app/config.yml',
+      'chmod 640 /srv/app/config.yml',
+      'sudo -u app cat /srv/app/config.yml',
+    ])
     expect(score.isResolved).toBe(true)
     expect(score.score).toBe(100)
+    expect(session.evaluator.getActions()[0]).toMatchObject({ sequence: 1, rawCommand: 'systemctl status app-worker', type: 'symptom', changedState: false })
+    expect(session.evaluator.getActions()[2]).toMatchObject({ sequence: 3, object: '/srv/app/config.yml', type: 'change', changedState: true })
   })
 
-  it('requires evidence before a Kubernetes fix is fully accepted', () => {
-    const scenario = scenarios.find((item) => item.id === 'kube-service-endpoints')!
-    const session = new SafeLabSession(scenario)
-    session.execute('kubectl set image deployment/web web=web:stable -n production')
-    expect(session.evaluator.getScore().isResolved).toBe(false)
-
-    session.execute('kubectl get pods -n production')
-    session.execute('kubectl describe svc web -n production')
+  it('does not award a complete score to a fix made before diagnostic proof', () => {
+    const session = sessionFor('linux-permission')
+    session.execute('chown app:app /srv/app/config.yml')
+    session.execute('chmod 640 /srv/app/config.yml')
+    session.execute('systemctl status app-worker')
+    session.execute('stat /srv/app/config.yml')
+    session.execute('sudo -u app cat /srv/app/config.yml')
     const score = session.evaluator.getScore()
-    expect(score.foundCause).toBe(true)
-    expect(score.isResolved).toBe(true)
+    expect(score.isResolved).toBe(false)
+    expect(score.score).toBeLessThan(100)
+  })
+
+  it('penalizes dangerous commands rather than treating them as diagnostics or repairs', () => {
+    const session = sessionFor('linux-runaway-process')
+    session.execute('top')
+    session.execute('ps -o pid,ppid,stat,cmd -p 3912')
+    session.execute('kill -9 3912')
+    const score = session.evaluator.getScore()
+    expect(score.dangerousActions).toBe(1)
+    expect(score.isResolved).toBe(false)
+    expect(session.evaluator.getActions()[2]).toMatchObject({ dangerous: true, changedState: true })
+  })
+
+  it.each([
+    ['linux-runaway-process', ['top', 'ps -o pid,ppid,stat,cmd -p 3912', 'kill -TERM 3912', 'ps -p 3912']],
+    ['linux-systemd', ['systemctl status app-worker', 'journalctl -u app-worker -n 30', 'systemctl daemon-reload', 'systemctl restart app-worker', 'systemctl status app-worker']],
+    ['linux-disk-full', ['df -h /var', 'du -xhd1 /var', 'lsof +L1', 'systemctl restart nginx', 'df -h /var']],
+    ['linux-network', ['curl http://10.4.8.21:8080', 'cat /etc/app/app.env', 'ss -lntp', 'trainer edit /etc/app/app.env BIND_ADDRESS=0.0.0.0', 'systemctl restart app-worker', 'curl http://10.4.8.21:8080']],
+    ['kube-crashloop', ['kubectl get pods -n production', 'kubectl logs web-6d7c9f6b7d-2xk9m --previous -n production', 'kubectl rollout undo deployment/web -n production', 'kubectl get pods -n production', 'kubectl rollout status deployment/web -n production']],
+    ['kube-imagepull', ['kubectl get pods -n production', 'kubectl describe pod web-6d7c9f6b7d-2xk9m -n production', 'kubectl set image deployment/web web=registry.local/web:stable -n production', 'kubectl get pods -n production', 'kubectl rollout status deployment/web -n production']],
+    ['kube-oomkilled', ['kubectl get pods -n production', 'kubectl describe pod api-7d8f -n production', 'kubectl logs api-7d8f --previous -n production', 'kubectl set resources deployment/api -c api --limits=memory=512Mi -n production', 'kubectl get pods -n production']],
+    ['kube-pending', ['kubectl get pods -n production', 'kubectl describe pod worker-5f6d78cf9-xtfd -n production', 'kubectl set resources deployment/worker -c worker --requests=cpu=200m -n production', 'kubectl get pods worker-5f6d78cf9-xtfd -n production']],
+    ['kube-service-endpoints', ['kubectl get service web -n production', 'kubectl get endpoints web -n production', 'kubectl describe pod web-6d7c9f6b7d-2xk9m -n production', 'kubectl logs web-6d7c9f6b7d-2xk9m -n production', 'kubectl rollout undo deployment/web -n production', 'kubectl get endpoints web -n production']],
+  ])('completes the full valid path for %s', (id, commands) => {
+    expect(run(sessionFor(id), commands).isResolved).toBe(true)
   })
 
   it('never delegates an unknown command to an operating system', () => {
-    const scenario = scenarios.find((item) => item.id === 'linux-permission')!
-    const session = new SafeLabSession(scenario)
-    const { result } = session.execute('rm -rf /')
+    const { result } = sessionFor('linux-permission').execute('rm -rf /')
     expect(result.isError).toBe(true)
     expect(result.output).toContain('safe simulator')
   })

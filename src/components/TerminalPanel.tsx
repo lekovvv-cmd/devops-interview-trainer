@@ -42,5 +42,5 @@ export function TerminalPanel({ session, sessionKey, onScore }: { session: SafeL
     })
     return () => { window.clearTimeout(timer); window.removeEventListener('resize', resize); disposable.dispose(); terminal.dispose() }
   }, [session, sessionKey, onScore])
-  return <div className="overflow-hidden rounded-lg border border-[#394348] bg-[#0a0e10] shadow-inner"><div className="flex h-10 items-center justify-between border-b border-[#293338] bg-[#111719] px-4"><span className="font-mono text-xs text-slate-300">Терминал · виртуальная среда</span><span className="text-xs text-slate-500">Enter — выполнить</span></div><div ref={host} className="h-[460px] p-3 sm:h-[520px]" aria-label="Интерактивный безопасный терминал" /></div>
+  return <div className="overflow-hidden rounded-lg border border-[#394348] bg-[#0a0e10] shadow-inner"><div className="flex h-10 items-center justify-between border-b border-[#293338] bg-[#111719] px-4"><span className="font-mono text-xs text-slate-300">Терминал · виртуальная среда</span><span className="text-xs text-slate-500">Enter — выполнить</span></div><div ref={host} data-testid="safe-terminal" className="h-[460px] p-3 sm:h-[520px]" aria-label="Интерактивный безопасный терминал" /></div>
 }

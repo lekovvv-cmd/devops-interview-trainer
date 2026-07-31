@@ -2,27 +2,12 @@ import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import type { ModuleId } from '../types/domain'
 
-export interface QuizAttempt {
-  questionId: string
-  correct: boolean
-  completedAt: string
-}
-
-export interface LabAttempt {
-  score: number
-  usedHints: number
-  completedAt: string
-}
-
+export interface QuizAttempt { questionId: string; correct: boolean; completedAt: string }
+export interface LabAttempt { score: number; usedHints: number; completedAt: string }
 export type Confidence = 'missed' | 'partial' | 'confident'
+export interface ReviewProgress { confidence: Confidence; dueAt: string; updatedAt: string }
 
-export interface ReviewProgress {
-  confidence: Confidence
-  dueAt: string
-  updatedAt: string
-}
-
-interface ProgressState {
+export interface ProgressState {
   completedModules: Partial<Record<ModuleId, boolean>>
   quizAttempts: QuizAttempt[]
   labAttempts: Record<string, LabAttempt>
@@ -38,32 +23,31 @@ interface ProgressState {
   resetProgress: () => void
 }
 
-const initialState = {
-  completedModules: {},
-  quizAttempts: [],
-  labAttempts: {},
-  interviewConfidence: {},
-  reviewProgress: {},
-  lastLesson: undefined,
+export const progressStorageVersion = 2
+export const initialProgressState = { completedModules: {}, quizAttempts: [], labAttempts: {}, interviewConfidence: {}, reviewProgress: {}, lastLesson: undefined }
+export const migrateProgressState = (persistedState?: unknown, version?: number): typeof initialProgressState => {
+  void persistedState
+  void version
+  return { ...initialProgressState, completedModules: {}, quizAttempts: [], labAttempts: {}, interviewConfidence: {}, reviewProgress: {} }
 }
 
 export const useProgressStore = create<ProgressState>()(
   persist(
     (set) => ({
-      ...initialState,
+      ...initialProgressState,
       completeModule: (id) => set((state) => ({ completedModules: { ...state.completedModules, [id]: true }, lastLesson: id })),
       recordQuiz: (questionId, correct) => set((state) => ({ quizAttempts: [...state.quizAttempts.filter((attempt) => attempt.questionId !== questionId), { questionId, correct, completedAt: new Date().toISOString() }] })),
       recordLab: (scenarioId, score, usedHints) => set((state) => ({ labAttempts: { ...state.labAttempts, [scenarioId]: { score, usedHints, completedAt: new Date().toISOString() } } })),
       recordInterviewConfidence: (questionId, confidence) => set((state) => ({ interviewConfidence: { ...state.interviewConfidence, [questionId]: confidence } })),
-      recordReview: (cardId, confidence) => set((state) => {
-        const now = new Date()
-        const delay = confidence === 'missed' ? 1 : confidence === 'partial' ? 3 : 10
-        const dueAt = new Date(now.getTime() + delay * 24 * 60 * 60 * 1000).toISOString()
-        return { reviewProgress: { ...state.reviewProgress, [cardId]: { confidence, dueAt, updatedAt: now.toISOString() } } }
-      }),
+      recordReview: (cardId, confidence) => set((state) => { const now = new Date(); const days = confidence === 'missed' ? 1 : confidence === 'partial' ? 3 : 10; return { reviewProgress: { ...state.reviewProgress, [cardId]: { confidence, dueAt: new Date(now.getTime() + days * 86_400_000).toISOString(), updatedAt: now.toISOString() } } } }),
       setLastLesson: (id) => set({ lastLesson: id }),
-      resetProgress: () => set(initialState),
+      resetProgress: () => set(initialProgressState),
     }),
-    { name: 'devops-interview-trainer-progress', storage: createJSONStorage(() => localStorage) },
+    {
+      name: 'devops-interview-trainer-progress',
+      version: progressStorageVersion,
+      storage: createJSONStorage(() => localStorage),
+      migrate: migrateProgressState,
+    },
   ),
 )

@@ -1,15 +1,25 @@
 # DevOps Interview Trainer
 
-Локальный React-тренажёр для подготовки к конкретному junior DevOps-собеседованию. Первая версия — компактный, но рабочий вертикальный срез: короткая теория, 24 вопроса, 6 troubleshooting-сценариев, безопасные Linux/Kubernetes-симуляторы и локальный прогресс.
+Локальный тренажёр для подготовки к junior DevOps-собеседованию. Приложение работает без backend, внешних API, Docker и реального Kubernetes-кластера: терминальные команды разбираются и выполняются только над типизированным виртуальным состоянием.
+
+## Что входит
+
+- 10 связанных уроков: 6 по Linux и 4 по Kubernetes.
+- 50 вопросов из единого источника данных — в каждом уроке по 2 single-choice, 1 multiple-choice, 1 command и 1 открытому вопросу.
+- 10 troubleshooting-сценариев: права, CPU-процесс, systemd, удалённый открытый файл, bind address, CrashLoopBackOff, ImagePullBackOff, OOMKilled, Pending и Service без endpoints.
+- Guided practice, самостоятельная лаборатория, интервью, карточки повторения и локальное хранение прогресса.
+- Версионированный `localStorage` state: несовместимые старые данные безопасно сбрасываются при миграции.
 
 ## Запуск
 
+Требуется Node.js 22.14.0 и pnpm 9.15.4 или совместимые версии.
+
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Проверки:
+## Проверки
 
 ```bash
 pnpm lint
@@ -19,32 +29,46 @@ pnpm build
 pnpm test:e2e
 ```
 
-## Состав вертикального среза
+E2E-тесты самостоятельно собирают production-версию и запускают её на порту `4174`, чтобы не подключаться к случайному dev-серверу.
 
-- 4 учебных блока: Linux-права; процессы и systemd; сеть/диски; Kubernetes workloads, Service и probes.
-- 24 вопроса типов single, multiple, command и open answer.
-- 6 лабораторий: permission denied, заполненный диск с удалённым открытым файлом, CrashLoopBackOff, ImagePullBackOff, Pending и Service без endpoints.
-- Безопасная виртуальная Linux-среда: `pwd`, `cd`, `ls`, `cat`, `grep`, `find`, `chmod`, `chown`, `stat`, `ps`, `pgrep`, `kill`, `top`, `free`, `df`, `du`, `lsblk`, `ip`, `ss`, `curl`, `systemctl`, `journalctl` и `lsof +L1` для сценария с удалённым файлом.
-- Kubernetes-среда: `kubectl get`, `describe`, `logs`, `logs --previous`, `scale`, `delete`, `set image`, `rollout status`, `rollout history`, `rollout undo`.
-- Прогресс в `localStorage` через Zustand persist.
+## Учебные данные и прогресс
 
-## Безопасность
+`src/data/learning.ts` — каноническая публичная точка учебных данных. Она объединяет описания десяти уроков из `studyLessons.ts` и все вопросы. Dashboard, Modules, Quiz, Progress, Interview и повторение работают с одинаковыми `ModuleId`.
 
-В приложении нет backend, Docker, Kubernetes-кластера или shell-процессов. `src/lib/terminal/commandParser.ts` только разбирает строку, а `LinuxSimulator` и `KubernetesSimulator` читают и меняют собственное виртуальное состояние. Ни `eval`, ни `exec`, ни реальные команды ОС не используются.
+Готовность урока рассчитывается по результатам квиза, самооценке интервью, карточкам, успешно завершённым лабораториям и ручной отметке урока. Ручная отметка имеет вес 10%, поэтому сама по себе не создаёт ложную готовность. Все показатели ограничены диапазоном 0–100%.
+
+## Безопасный терминал
+
+Это не shell и не контейнер. В коде нет `eval`, `exec` и запуска команд операционной системы.
+
+Поддерживаемые Linux-команды в модели: `ls`, `stat`, `cat`, `chmod`, `chown`, `ps`, `pgrep`, `top`, `kill`, `systemctl`, `journalctl`, `df`, `du`, `lsof +L1`, `ss`, `curl`, `ip`, `dig` и ограниченный `trainer edit /etc/app/app.env BIND_ADDRESS=0.0.0.0`.
+
+Поддерживаемые Kubernetes-команды: `kubectl get`, `describe`, `logs`, `logs --previous`, `set image`, `set resources`, `rollout status/history/undo` и безопасно заблокированный `delete pod`.
+
+Симулятор намеренно реализует только команды и объекты, нужные сценариям. Не стоит использовать его как справочник полной POSIX-shell или Kubernetes CLI.
+
+## Проверка сценариев
+
+`ScenarioEngine` сохраняет последовательный журнал действий: исходную и разобранную команду, объект, аргументы, диагностические теги, изменение виртуального состояния и опасность действия. Для полного зачёта нужны:
+
+1. симптом;
+2. диагностика конкретной причины;
+3. безопасное исправление после диагностики;
+4. повторная проверка результата.
+
+Опасные действия (`chmod 777`, `kill -9` до SIGTERM, удаление Pod до логов, reboot и т. п.) не засчитываются как решение и снижают оценку.
 
 ## Структура
 
 ```text
 src/
-  components/          # layout, quiz, xterm.js terminal, UI primitives
-  data/                # учебный контент и сценарии
-  lib/terminal/        # независимые parser, simulators и scenario engine
-  pages/               # Dashboard, Modules, Lesson, Quiz, Lab, Progress
-  store/               # persisted Zustand progress
-  types/               # доменные TypeScript-типы
-e2e/                   # Playwright smoke test
+  data/learning.ts          # единый публичный источник уроков и вопросов
+  data/studyLessons.ts      # содержание 10 уроков
+  data/scenarios.ts         # 10 troubleshooting-сценариев
+  lib/terminal/             # parser, Linux/Kubernetes simulators, ScenarioEngine
+  lib/progress.ts           # расчёт прогресса и слабых тем
+  pages/                    # существующие экраны приложения
+  store/progressStore.ts    # versioned localStorage state
+e2e/                        # Playwright Chromium flows
+.github/workflows/ci.yml    # CI
 ```
-
-## Архитектурная граница для будущего backend
-
-UI обращается только к `SafeLabSession`. Позже его можно заменить адаптером настоящего Docker-backend, сохранив контракты `CommandResult` и `ScenarioScore`; в текущей версии эта точка расширения намеренно остаётся локальной и безопасной.

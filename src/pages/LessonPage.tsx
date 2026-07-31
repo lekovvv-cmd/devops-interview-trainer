@@ -1,13 +1,13 @@
 import { ArrowLeft, CheckCircle2, ChevronRight, Lightbulb, MessageSquare, RotateCcw, TerminalSquare } from 'lucide-react'
 import { useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
-import { lessonById, lessonCycle, lessonPlans, type StudyLesson } from '../data/studyLessons'
+import { lessonById, lessonCycle, lessonPlans, type StudyLesson } from '../data/learning'
 import { Button, SecondaryButton, SuccessNotice } from '../components/ui'
 import { useProgressStore } from '../store/progressStore'
+import { matchesAcceptedCommand } from '../lib/terminal/commandParser'
 
 type Level = 'simple' | 'technical' | 'interview'
 const labels: Record<Level, string> = { simple: 'Простое объяснение', technical: 'Как это работает', interview: 'Как ответить на собеседовании' }
-const normalize = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ')
 
 export function LessonPage() {
   const { moduleId } = useParams()
@@ -69,7 +69,7 @@ function KnowledgeChecks({ lesson }: { lesson: StudyLesson }) {
 
 function GuidedPractice({ lesson }: { lesson: StudyLesson }) {
   const [step, setStep] = useState(0); const [choice, setChoice] = useState<number | undefined>(); const [command, setCommand] = useState(''); const [ran, setRan] = useState(false)
-  const current = lesson.guided[step]; const choiceCorrect = choice === current.correct; const commandCorrect = current.accepted.includes(normalize(command))
+  const current = lesson.guided[step]; const choiceCorrect = choice === current.correct; const commandCorrect = matchesAcceptedCommand(command, current.accepted)
   const resetStep = () => { setChoice(undefined); setCommand(''); setRan(false) }
   return <Section title="Учебная лаборатория"><div id="guided" className="mt-5 rounded-lg border border-[#2d383d] bg-[#171d20] p-5 sm:p-6"><div className="flex items-center justify-between"><p className="font-mono text-xs uppercase tracking-wide text-lime-300">Шаг {step + 1} из {lesson.guided.length}</p><button onClick={() => { setStep(0); resetStep() }} className="inline-flex items-center gap-2 text-xs text-slate-400 hover:text-white"><RotateCcw size={14} />начать заново</button></div><p className="mt-4 font-semibold leading-6 text-white">{current.question}</p><div className="mt-4 grid gap-2">{current.options.map((option, index) => <button key={option} disabled={choice !== undefined} onClick={() => setChoice(index)} className={`rounded-md border px-3 py-3 text-left text-sm disabled:cursor-default ${choice === index ? index === current.correct ? 'border-lime-300 bg-lime-300/10 text-lime-100' : 'border-red-300/70 bg-red-300/10 text-red-100' : 'border-[#394348] text-slate-300 hover:border-[#566369]'}`}>{option}</button>)}</div>{choice !== undefined && !choiceCorrect && <p className="mt-3 text-sm text-red-200">Эта проверка не сужает гипотезу. Попробуй шаг ещё раз.</p>}{choiceCorrect && <div className="mt-5 border-t border-[#2c373b] pt-5"><p className="text-sm leading-6 text-slate-200">{current.commandQuestion}</p><div className="mt-3 flex flex-col gap-3 sm:flex-row"><input value={command} onChange={(event) => { setCommand(event.target.value); setRan(false) }} placeholder="Введи команду в безопасном симуляторе" className="h-11 min-w-0 flex-1 rounded-md border border-[#465158] bg-[#0a0e10] px-3 font-mono text-sm text-lime-100 outline-none placeholder:text-slate-600 focus:border-lime-300" /><Button disabled={!command.trim()} onClick={() => setRan(true)}>Выполнить</Button></div>{ran && <div className="mt-4">{commandCorrect ? <SuccessNotice><div><pre className="whitespace-pre-wrap font-mono text-sm text-lime-100">{current.output}</pre><p className="mt-3 leading-6 text-slate-200">{current.explanation}</p></div></SuccessNotice> : <p className="rounded-md border border-amber-300/30 bg-amber-300/10 p-3 text-sm leading-6 text-amber-100">Команда пока не даёт нужный ответ. Вернись к вопросу: что именно нужно выяснить сейчас?</p>}</div>}{ran && commandCorrect && <div className="mt-5">{step < lesson.guided.length - 1 ? <Button onClick={() => { setStep((value) => value + 1); resetStep() }}>Следующий шаг</Button> : <SuccessNotice><p>Практика завершена: ты прошёл путь от симптома к безопасному действию.</p></SuccessNotice>}</div>}</div>}</div></Section>
 }

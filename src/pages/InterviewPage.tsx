@@ -1,7 +1,7 @@
 import { MessageSquare, TerminalSquare } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { lessonById, studyLessons, type StudyLesson } from '../data/studyLessons'
+import { lessonById, studyLessons, type StudyLesson } from '../data/learning'
 import { Button, SecondaryButton, SuccessNotice } from '../components/ui'
 import { useProgressStore, type Confidence } from '../store/progressStore'
 

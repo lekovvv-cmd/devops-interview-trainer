@@ -1,6 +1,6 @@
 import { ArrowRight, CheckCircle2, Clock3 } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { studyLessons } from '../data/studyLessons'
+import { studyLessons } from '../data/learning'
 import { useProgressStore } from '../store/progressStore'
 
 export function ModulesPage() {

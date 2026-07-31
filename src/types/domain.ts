@@ -9,22 +9,16 @@ export type ModuleId =
   | 'kubernetes-network'
   | 'kubernetes-config'
   | 'kubernetes-troubleshooting'
+
 export type QuestionKind = 'single' | 'multiple' | 'command' | 'open'
 export type LabDomain = 'linux' | 'kubernetes'
+export type ScenarioActionType = 'symptom' | 'diagnostic' | 'change' | 'verification' | 'dangerous' | 'noop' | 'unknown'
 
-export interface CommandExample {
-  command: string
-  description: string
-}
-
-export interface QuizOption {
-  id: string
-  label: string
-}
+export interface QuizOption { id: string; label: string }
 
 export interface QuizQuestion {
   id: string
-  moduleId: ModuleId
+  lessonId: ModuleId
   kind: QuestionKind
   prompt: string
   options?: QuizOption[]
@@ -34,28 +28,17 @@ export interface QuizQuestion {
   explanation: string
 }
 
-export interface LessonModule {
-  id: ModuleId
-  title: string
-  duration: string
-  summary: string
-  keyConcepts: string[]
-  commands: CommandExample[]
-  workExample: { title: string; context: string; code: string }
-  mistakes: string[]
-  interviewQuestions: string[]
-  miniCheckId: string
-  practicePrompt: string
-}
-
 export interface LabScenario {
   id: string
+  lessonIds: ModuleId[]
   domain: LabDomain
   title: string
   shortTitle: string
   briefing: string
   hiddenCause: string
+  symptomChecks: string[]
   requiredDiagnostics: string[]
+  requiredVerifications: string[]
   acceptedResolutions: string[]
   optionalSteps: string[]
   dangerousActions: string[]
@@ -63,16 +46,49 @@ export interface LabScenario {
   successSummary: string
 }
 
+export interface ParsedCommand {
+  raw: string
+  command: string
+  args: string[]
+  flags: string[]
+}
+
+export interface ScenarioAction {
+  type: ScenarioActionType
+  object?: string
+  arguments?: string[]
+  diagnosticTags?: string[]
+  changedState?: boolean
+  dangerous?: boolean
+  meaningful?: boolean
+}
+
 export interface CommandResult {
   output: string
   tags: string[]
+  action?: ScenarioAction
   isError?: boolean
+}
+
+export interface ScenarioActionLog {
+  sequence: number
+  at: number
+  rawCommand: string
+  parsed: ParsedCommand
+  type: ScenarioActionType
+  object?: string
+  arguments: string[]
+  diagnosticTags: string[]
+  changedState: boolean
+  dangerous: boolean
 }
 
 export interface ScenarioScore {
   score: number
   foundCause: boolean
+  verified: boolean
   usedHints: number
+  dangerousActions: number
   completedDiagnostics: string[]
   isResolved: boolean
 }

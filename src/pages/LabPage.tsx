@@ -8,7 +8,7 @@ import { SafeLabSession } from '../lib/terminal'
 import { useProgressStore } from '../store/progressStore'
 import type { LabDomain, LabScenario, ScenarioScore } from '../types/domain'
 
-const emptyScore: ScenarioScore = { score: 0, foundCause: false, usedHints: 0, completedDiagnostics: [], isResolved: false }
+const emptyScore: ScenarioScore = { score: 0, foundCause: false, verified: false, usedHints: 0, dangerousActions: 0, completedDiagnostics: [], isResolved: false }
 
 export function LabPage() {
   const { domain = 'linux' } = useParams()
@@ -26,7 +26,7 @@ export function LabPage() {
   useEffect(() => { setActiveId(initialId); setVersion(0); setScore(emptyScore) }, [initialId])
 
   const active = available.find((scenario) => scenario.id === activeId) ?? available[0]
-  const session = useMemo(() => new SafeLabSession(active), [active, version])
+  const session = useMemo(() => new SafeLabSession(active, version), [active, version])
   const onScore = useCallback((next: ScenarioScore) => {
     setScore(next)
     if (next.isResolved) recordLab(active.id, next.score, next.usedHints)

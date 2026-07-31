@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { QuizQuestion } from '../types/domain'
+import { matchesAcceptedCommand } from '../lib/terminal/commandParser'
 import { Button, SecondaryButton, SuccessNotice } from './ui'
 
 export function QuizCard({ question, onResult, compact = false }: { question: QuizQuestion; onResult: (correct: boolean) => void; compact?: boolean }) {
@@ -8,7 +9,7 @@ export function QuizCard({ question, onResult, compact = false }: { question: Qu
   const [checked, setChecked] = useState(false)
   const multiple = question.kind === 'multiple'
   const optionCorrect = selected.length === (question.correctOptionIds?.length ?? 0) && selected.every((id) => question.correctOptionIds?.includes(id))
-  const commandCorrect = question.acceptedAnswers?.some((answer) => answer.trim().toLowerCase() === text.trim().toLowerCase()) ?? false
+  const commandCorrect = question.acceptedAnswers ? matchesAcceptedCommand(text, question.acceptedAnswers) : false
   const correct = question.kind === 'open' ? false : question.kind === 'command' ? commandCorrect : optionCorrect
   const toggleOption = (id: string) => setSelected((previous) => multiple ? previous.includes(id) ? previous.filter((item) => item !== id) : [...previous, id] : [id])
   const submit = () => { setChecked(true); if (question.kind !== 'open') onResult(correct) }

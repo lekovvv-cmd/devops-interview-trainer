@@ -1,20 +1,21 @@
 import { KubernetesSimulator } from './kubernetesSimulator'
 import { LinuxSimulator } from './linuxSimulator'
 import { ScenarioEngine } from './scenarioEngine'
+import { parseCommand } from './commandParser'
 import type { CommandResult, LabScenario, ScenarioScore } from '../../types/domain'
 
 export class SafeLabSession {
   readonly evaluator: ScenarioEngine
   private readonly simulator: LinuxSimulator | KubernetesSimulator
 
-  constructor(readonly scenario: LabScenario) {
+  constructor(readonly scenario: LabScenario, readonly sessionVersion = 0) {
     this.evaluator = new ScenarioEngine(scenario)
     this.simulator = scenario.domain === 'linux' ? new LinuxSimulator(scenario.id) : new KubernetesSimulator(scenario.id)
   }
 
   execute(command: string): { result: CommandResult; score: ScenarioScore } {
     const result = this.simulator.execute(command)
-    return { result, score: this.evaluator.record(result) }
+    return { result, score: this.evaluator.record(command, parseCommand(command), result) }
   }
 
   useHint(): ScenarioScore {

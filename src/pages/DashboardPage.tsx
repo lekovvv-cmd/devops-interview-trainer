@@ -1,9 +1,9 @@
 import { ArrowRight, BookOpen, BrainCircuit, CalendarClock, MessageSquare, Play, TerminalSquare } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { studyLessons, type StudyLesson } from '../data/studyLessons'
-import { scenarios } from '../data/scenarios'
+import { studyLessons, type StudyLesson } from '../data/learning'
 import { ProgressBar } from '../components/ui'
 import { useProgressStore } from '../store/progressStore'
+import { progressSummary } from '../lib/progress'
 
 export function DashboardPage() {
   const completed = useProgressStore((state) => state.completedModules)
@@ -11,14 +11,14 @@ export function DashboardPage() {
   const lastLesson = useProgressStore((state) => state.lastLesson)
   const reviewProgress = useProgressStore((state) => state.reviewProgress)
   const interviewConfidence = useProgressStore((state) => state.interviewConfidence)
+  const attempts = useProgressStore((state) => state.quizAttempts)
   const completedCount = Object.keys(completed).length
   const current = (lastLesson && studyLessons.find((lesson) => lesson.id === lastLesson)) ?? studyLessons.find((lesson) => !completed[lesson.id]) ?? studyLessons[0]
-  const weak = findWeakLesson(interviewConfidence, completed) ?? current
+  const summary = progressSummary({ completedModules: completed, quizAttempts: attempts, labAttempts: labs, interviewConfidence, reviewProgress })
+  const weak = studyLessons.find((lesson) => lesson.id === summary.weakLessons[0]?.lessonId) ?? current
   const due = Object.values(reviewProgress).filter((item) => new Date(item.dueAt).getTime() <= Date.now()).length
   const reviewCount = due || current.cards.length
-  const confidenceValues = Object.values(interviewConfidence)
-  const confident = confidenceValues.filter((value) => value === 'confident').length
-  const readiness = Math.round(((completedCount / studyLessons.length) * 70) + (confidenceValues.length ? (confident / confidenceValues.length) * 30 : 0))
+  const readiness = summary.overall
   const labRoute = current.challenge.route
 
   return <div className="space-y-7">
@@ -27,7 +27,7 @@ export function DashboardPage() {
       <Link to={`/modules/${current.id}`} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-lime-300 bg-lime-300 px-4 text-sm font-semibold text-[#111711] transition hover:bg-lime-200"><Play size={16} fill="currentColor" />Продолжить урок</Link>
     </section>
 
-    <section className="grid gap-4 md:grid-cols-3"><Metric label="Готовность" value={`${readiness}%`} note={`${completedCount} из ${studyLessons.length} уроков отмечены пройденными`} progress={readiness} /><Metric label="Карточки на сегодня" value={String(reviewCount)} note={due ? 'срок повторения уже наступил' : 'первые карточки текущей темы'} progress={Math.min(100, reviewCount * 20)} /><Metric label="Лаборатории" value={`${Object.keys(labs).length} / ${scenarios.length}`} note="разобранных самостоятельных задач" progress={Math.round((Object.keys(labs).length / scenarios.length) * 100)} /></section>
+    <section className="grid gap-4 md:grid-cols-3"><Metric label="Готовность" value={`${readiness}%`} note={`${completedCount} из ${studyLessons.length} уроков отмечены пройденными`} progress={readiness} /><Metric label="Карточки на сегодня" value={String(reviewCount)} note={due ? 'срок повторения уже наступил' : 'первые карточки текущей темы'} progress={Math.min(100, reviewCount * 20)} /><Metric label="Лаборатории" value={`${summary.solvedLabs} / ${summary.totalLabs}`} note="разобранных самостоятельных задач" progress={Math.round((summary.solvedLabs / summary.totalLabs) * 100)} /></section>
 
     <section className="grid gap-4 xl:grid-cols-4">
       <ActionCard icon={<BookOpen size={20} />} label="Сейчас изучаем" title={current.title} body={current.goal} to={`/modules/${current.id}`} action="Открыть урок" />
@@ -43,12 +43,6 @@ export function DashboardPage() {
 
     <section><div className="mb-4 flex items-end justify-between"><div><h2 className="text-xl font-semibold text-white">Все эталонные уроки</h2><p className="mt-1 text-sm text-slate-400">У каждого — свой план, объяснения трёх уровней, практика, интервью и повторение.</p></div><Link to="/modules" className="text-sm font-medium text-lime-300 hover:text-lime-200">Открыть программу</Link></div><div className="divide-y divide-[#263035] overflow-hidden rounded-lg border border-[#2d383d] bg-[#151b1e]">{studyLessons.map((lesson, index) => <LessonRow key={lesson.id} lesson={lesson} index={index} completed={Boolean(completed[lesson.id])} />)}</div></section>
   </div>
-}
-
-function findWeakLesson(confidence: Record<string, 'missed' | 'partial' | 'confident'>, completed: Partial<Record<StudyLesson['id'], boolean>>) {
-  const missedId = Object.entries(confidence).find(([, value]) => value !== 'confident')?.[0]
-  if (missedId) return studyLessons.find((lesson) => lesson.interview.some((question) => question.id === missedId))
-  return studyLessons.find((lesson) => !completed[lesson.id])
 }
 
 function ActionCard({ icon, label, title, body, to, action }: { icon: React.ReactNode; label: string; title: string; body: string; to: string; action: string }) {
