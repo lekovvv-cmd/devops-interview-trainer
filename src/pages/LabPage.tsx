@@ -1,5 +1,5 @@
 import { CheckCircle2, Lightbulb, LockKeyhole, RotateCcw } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { TerminalPanel } from '../components/TerminalPanel'
 import { Button, SecondaryButton, SuccessNotice } from '../components/ui'
@@ -8,7 +8,7 @@ import { SafeLabSession } from '../lib/terminal'
 import { useProgressStore } from '../store/progressStore'
 import type { LabDomain, LabScenario, ScenarioScore } from '../types/domain'
 
-const emptyScore: ScenarioScore = { score: 0, foundCause: false, verified: false, usedHints: 0, dangerousActions: 0, completedDiagnostics: [], isResolved: false }
+const emptyScore: ScenarioScore = { score: 0, foundCause: false, verified: false, usedHints: 0, dangerousActions: 0, resolutionBlocked: false, completedDiagnostics: [], isResolved: false }
 
 export function LabPage() {
   const { domain = 'linux' } = useParams()
@@ -22,6 +22,7 @@ export function LabPage() {
   const [version, setVersion] = useState(0)
   const [score, setScore] = useState<ScenarioScore>(emptyScore)
   const recordLab = useProgressStore((state) => state.recordLab)
+  const recordedSessions = useRef(new Set<string>())
 
   useEffect(() => { setActiveId(initialId); setVersion(0); setScore(emptyScore) }, [initialId])
 
@@ -29,8 +30,12 @@ export function LabPage() {
   const session = useMemo(() => new SafeLabSession(active, version), [active, version])
   const onScore = useCallback((next: ScenarioScore) => {
     setScore(next)
-    if (next.isResolved) recordLab(active.id, next.score, next.usedHints)
-  }, [active.id, recordLab])
+    const sessionId = `${active.id}-${version}`
+    if (next.isResolved && next.verified && !next.resolutionBlocked && !recordedSessions.current.has(sessionId)) {
+      recordedSessions.current.add(sessionId)
+      recordLab(active.id, next.score, next.usedHints, next.dangerousActions)
+    }
+  }, [active.id, recordLab, version])
   const chooseScenario = (scenario: LabScenario) => { setActiveId(scenario.id); setVersion(0); setScore(emptyScore) }
   const reset = () => { setVersion((current) => current + 1); setScore(emptyScore) }
   const routeName = selectedDomain === 'linux' ? 'Практика Linux' : 'Практика Kubernetes'

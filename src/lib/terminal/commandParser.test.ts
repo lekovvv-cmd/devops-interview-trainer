@@ -22,6 +22,15 @@ describe('parseCommand', () => {
   it('normalizes Kubernetes resource aliases, namespace flags and independent flag order', () => {
     expect(commandsEquivalent('kubectl describe po api-7d8f --namespace production', 'kubectl describe pod api-7d8f -n production')).toBe(true)
     expect(commandsEquivalent('kubectl logs -n production web-6d7c9f6b7d-2xk9m --previous', 'kubectl logs web-6d7c9f6b7d-2xk9m --previous -n production')).toBe(true)
+    expect(commandsEquivalent('kubectl -n production get pods', 'kubectl get pods --namespace production')).toBe(true)
+    expect(commandsEquivalent('kubectl get -n production pods', 'kubectl --namespace=production get pods')).toBe(true)
+  })
+
+  it('keeps Linux -n as a line-count flag rather than a Kubernetes namespace', () => {
+    const normalized = normalizedCommand('journalctl -n 30 -u app-worker --no-pager')
+    expect(normalized).not.toContain('"namespace"')
+    expect(normalized).toContain('"-n=30"')
+    expect(commandsEquivalent('journalctl -n 30 -u app-worker --no-pager', 'journalctl -u app-worker -n 30 --no-pager')).toBe(true)
   })
 
   it('checks command questions semantically, including the required object and namespace', () => {

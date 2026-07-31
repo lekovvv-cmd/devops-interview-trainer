@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { quizQuestions, studyLessons } from '../data/learning'
 import { scenarios } from '../data/scenarios'
 import { lessonProgress, progressSummary } from './progress'
-import { migrateProgressState, progressStorageVersion } from '../store/progressStore'
+import { initialProgressState, migrateProgressState, progressStorageVersion, useProgressStore } from '../store/progressStore'
 
 const empty = { completedModules: {}, quizAttempts: [], labAttempts: {}, interviewConfidence: {}, reviewProgress: {} }
 
@@ -27,7 +27,7 @@ describe('canonical learning data and progress', () => {
     const impossible = progressSummary({
       completedModules: Object.fromEntries(studyLessons.map((item) => [item.id, true])),
       quizAttempts: quizQuestions.map((question) => ({ questionId: question.id, correct: true, completedAt: '2026-07-31T00:00:00.000Z' })),
-      labAttempts: Object.fromEntries(scenarios.map((scenario) => [scenario.id, { score: 100, usedHints: 0, completedAt: '2026-07-31T00:00:00.000Z' }])),
+      labAttempts: Object.fromEntries(scenarios.map((scenario) => [scenario.id, { score: 100, usedHints: 0, dangerousActions: 0, attempts: 1, completedAt: '2026-07-31T00:00:00.000Z' }])),
       interviewConfidence: Object.fromEntries(studyLessons.flatMap((item) => item.interview.map((question) => [question.id, 'confident'] as const))),
       reviewProgress: Object.fromEntries(studyLessons.flatMap((item) => item.cards.map((card) => [card.id, { confidence: 'confident' as const, dueAt: '2026-08-10T00:00:00.000Z', updatedAt: '2026-07-31T00:00:00.000Z' }]))),
     })
@@ -48,8 +48,16 @@ describe('canonical learning data and progress', () => {
   })
 
   it('resets incompatible persisted state through the explicit versioned migration', () => {
-    const migrated = migrateProgressState({ completedModules: { legacy: true } }, 1)
-    expect(progressStorageVersion).toBe(2)
+    const migrated = migrateProgressState({ completedModules: { legacy: true } }, 2)
+    expect(progressStorageVersion).toBe(3)
     expect(migrated).toEqual(empty)
+  })
+
+  it('keeps the best completed lab result while counting repeat attempts', () => {
+    useProgressStore.setState({ ...initialProgressState })
+    useProgressStore.getState().recordLab('linux-permission', 82, 2, 0)
+    useProgressStore.getState().recordLab('linux-permission', 70, 0, 0)
+    useProgressStore.getState().recordLab('linux-permission', 82, 1, 0)
+    expect(useProgressStore.getState().labAttempts['linux-permission']).toMatchObject({ score: 82, usedHints: 1, dangerousActions: 0, attempts: 3 })
   })
 })

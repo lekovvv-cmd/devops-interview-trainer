@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { scenarios } from '../../data/scenarios'
 import { SafeLabSession } from '.'
+import { parseCommand } from './commandParser'
+import { ScenarioEngine } from './scenarioEngine'
 
 function sessionFor(id: string): SafeLabSession {
   const scenario = scenarios.find((item) => item.id === id)
@@ -41,15 +43,56 @@ describe('ScenarioEngine', () => {
     expect(score.score).toBeLessThan(100)
   })
 
-  it('penalizes dangerous commands rather than treating them as diagnostics or repairs', () => {
+  it('locks the scenario after SIGKILL before SIGTERM and never accepts a later process check', () => {
     const session = sessionFor('linux-runaway-process')
     session.execute('top')
     session.execute('ps -o pid,ppid,stat,cmd -p 3912')
-    session.execute('kill -9 3912')
+    const unsafeKill = session.execute('kill -9 3912')
+    const laterCheck = session.execute('ps -p 3912')
     const score = session.evaluator.getScore()
     expect(score.dangerousActions).toBe(1)
     expect(score.isResolved).toBe(false)
-    expect(session.evaluator.getActions()[2]).toMatchObject({ dangerous: true, changedState: true })
+    expect(unsafeKill.result.tags).not.toContain('resolve:process')
+    expect(laterCheck.result.isError).toBe(true)
+    expect(session.evaluator.getActions()[2]).toMatchObject({ dangerous: true, changedState: true, blocksResolution: true })
+  })
+
+  it('resets every score category after a blocked attempt so a new safe path can pass', () => {
+    const session = sessionFor('linux-runaway-process')
+    run(session, ['top', 'ps -o pid,ppid,stat,cmd -p 3912', 'kill -9 3912'])
+    session.useHint()
+    expect(session.evaluator.getScore().resolutionBlocked).toBe(true)
+    expect(session.evaluator.getActions()).toHaveLength(3)
+    session.evaluator.reset()
+    expect(session.evaluator.getScore()).toMatchObject({ score: 0, usedHints: 0, dangerousActions: 0, resolutionBlocked: false, isResolved: false, completedDiagnostics: [] })
+    expect(session.evaluator.getActions()).toHaveLength(0)
+  })
+
+  it('does not turn a normal dangerous penalty into a global resolution lock', () => {
+    const session = sessionFor('linux-permission')
+    session.execute('chmod 777 /srv/app/config.yml')
+    const score = session.evaluator.getScore()
+    expect(score.dangerousActions).toBe(1)
+    expect(score.resolutionBlocked).toBe(false)
+  })
+
+  it('does not accept a diagnostic tag from an unrelated Linux object', () => {
+    const session = sessionFor('linux-permission')
+    session.execute('systemctl status app-worker')
+    session.execute('stat /etc/app/app.env')
+    expect(session.evaluator.getScore().completedDiagnostics).not.toContain('diag:permissions')
+  })
+
+  it('does not count verification collected before a valid resolution', () => {
+    const scenario = scenarios.find((item) => item.id === 'linux-permission')!
+    const engine = new ScenarioEngine(scenario)
+    engine.record('systemctl status app-worker', parseCommand('systemctl status app-worker'), { output: '', tags: ['symptom:service'] })
+    engine.record('stat /srv/app/config.yml', parseCommand('stat /srv/app/config.yml'), { output: '', tags: ['diag:permissions'] })
+    engine.record('sudo -u app cat /srv/app/config.yml', parseCommand('sudo -u app cat /srv/app/config.yml'), { output: '', tags: ['verify:permission'] })
+    expect(engine.getScore().verified).toBe(false)
+    engine.record('chown app:app /srv/app/config.yml', parseCommand('chown app:app /srv/app/config.yml'), { output: '', tags: ['resolve:permission'], action: { type: 'change', meaningful: true } })
+    engine.record('sudo -u app cat /srv/app/config.yml', parseCommand('sudo -u app cat /srv/app/config.yml'), { output: '', tags: ['verify:permission'], action: { type: 'verification', meaningful: true } })
+    expect(engine.getScore().verified).toBe(true)
   })
 
   it.each([
