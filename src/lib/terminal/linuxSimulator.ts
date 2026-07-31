@@ -14,6 +14,7 @@ export class LinuxSimulator {
   private readonly directories = new Map([['/srv', { owner: 'root', group: 'root', mode: '755' }], ['/srv/app', { owner: 'app', group: 'app', mode: '750' }]])
   private processState: ProcessState = 'running'
   private termTried = false
+  private processScenarioLocked = false
   private unitReloaded = false
   private systemdActive = false
   private descriptorOpen = true
@@ -25,6 +26,7 @@ export class LinuxSimulator {
   execute(input: string): CommandResult {
     const parsed = parseCommand(input)
     if (!parsed.command) return this.result('', [], 'noop')
+    if (this.scenarioId === 'linux-runaway-process' && this.processScenarioLocked) return this.result('Scenario is locked after unsafe SIGKILL. Reset the virtual environment and diagnose the process before changing it.', [], 'noop', 'api-worker', true, false)
     if (parsed.command === 'sudo' && parsed.args.slice(0, 3).map((item) => item.toLowerCase()).join(' ') === '-u app cat') return this.cat(parsed.args[3] ?? '', true)
     switch (parsed.command) {
       case 'pwd': return this.result('/home/student', [], 'diagnostic', 'cwd')
@@ -128,7 +130,14 @@ export class LinuxSimulator {
     if (pid === 1234) return this.danger('kill: stopping nginx is not the disk-full repair; use systemctl restart nginx after lsof', 'nginx')
     if (this.processState === 'exited') return this.error(`kill: (${pid}) - No such process`, 'change')
     if (signal === 'TERM') { this.termTried = true; this.processState = 'exited'; return this.result('api-worker: draining requests\napi-worker: stopped cleanly', this.scenarioId === 'linux-runaway-process' ? ['resolve:process'] : [], 'change', 'api-worker', false, true) }
-    if (signal === 'KILL') { const dangerous = !this.termTried; this.processState = 'exited'; return this.result('api-worker: killed', this.scenarioId === 'linux-runaway-process' ? ['resolve:process'] : [], dangerous ? 'dangerous' : 'change', 'api-worker', false, true, dangerous) }
+    if (signal === 'KILL') {
+      if (!this.termTried) {
+        this.processState = 'exited'
+        this.processScenarioLocked = this.scenarioId === 'linux-runaway-process'
+        return this.result('api-worker: killed with SIGKILL before SIGTERM; this is an unsafe, non-recoverable scenario path. Reset the virtual environment.', [], 'dangerous', 'api-worker', false, true, true, true)
+      }
+      return this.error(`kill: (${pid}) - No such process`, 'change')
+    }
     if (signal === 'STOP') { this.processState = 'stopped'; return this.result('api-worker: stopped', [], 'change', 'api-worker', false, true) }
     this.processState = 'running'; return this.result('api-worker: continued', [], 'change', 'api-worker', false, true)
   }
@@ -206,7 +215,7 @@ export class LinuxSimulator {
   private pathAllowsApp(): boolean { return [...this.directories.values()].every((directory) => { const bit = directory.owner === 'app' ? Number(directory.mode[0]) : directory.group === 'app' ? Number(directory.mode[1]) : Number(directory.mode[2]); return (bit & 1) !== 0 }) }
   private safePermissionState(): boolean { const file = this.files.get('/srv/app/config.yml')!; return file.owner === 'app' && file.group === 'app' && file.mode === '640' && this.appCanReadConfig() }
   private permissionTags(): string[] { return this.scenarioId === 'linux-permission' ? ['diag:permissions'] : [] }
-  private result(output: string, tags: string[], type: ScenarioActionType, object?: string, isError = false, meaningful = true, dangerous = false): CommandResult { const action: ScenarioAction = { type, object, diagnosticTags: tags, changedState: type === 'change' || type === 'dangerous', dangerous, meaningful }; return { output, tags, action, isError } }
+  private result(output: string, tags: string[], type: ScenarioActionType, object?: string, isError = false, meaningful = true, dangerous = false, blocksResolution = false): CommandResult { const action: ScenarioAction = { type, object, diagnosticTags: tags, changedState: type === 'change' || type === 'dangerous', dangerous, blocksResolution, meaningful }; return { output, tags, action, isError } }
   private error(output: string, type: ScenarioActionType): CommandResult { return this.result(output, [], type, undefined, true, false) }
   private danger(output: string, object: string): CommandResult { return this.result(output, [], 'dangerous', object, true, false, true) }
 }

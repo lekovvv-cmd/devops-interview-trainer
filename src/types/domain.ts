@@ -60,6 +60,7 @@ export interface ScenarioAction {
   diagnosticTags?: string[]
   changedState?: boolean
   dangerous?: boolean
+  blocksResolution?: boolean
   meaningful?: boolean
 }
 
@@ -81,6 +82,7 @@ export interface ScenarioActionLog {
   diagnosticTags: string[]
   changedState: boolean
   dangerous: boolean
+  blocksResolution: boolean
 }
 
 export interface ScenarioScore {

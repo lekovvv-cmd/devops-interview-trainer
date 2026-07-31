@@ -34,7 +34,14 @@ describe('LinuxSimulator', () => {
     expect(simulator.execute('ps -p 3912').output).not.toContain('3912')
 
     const forced = new LinuxSimulator('linux-runaway-process')
-    expect(forced.execute('kill -9 3912').action?.dangerous).toBe(true)
+    const unsafeKill = forced.execute('kill -9 3912')
+    expect(unsafeKill.action).toMatchObject({ dangerous: true, blocksResolution: true })
+    expect(unsafeKill.tags).not.toContain('resolve:process')
+    expect(forced.execute('ps -p 3912').isError).toBe(true)
+
+    const namedKill = new LinuxSimulator('linux-runaway-process').execute('kill -KILL 3912')
+    expect(namedKill.action).toMatchObject({ dangerous: true, blocksResolution: true })
+    expect(namedKill.tags).not.toContain('resolve:process')
   })
 
   it('requires daemon-reload before the fixed systemd service can start', () => {

@@ -41,15 +41,18 @@ describe('ScenarioEngine', () => {
     expect(score.score).toBeLessThan(100)
   })
 
-  it('penalizes dangerous commands rather than treating them as diagnostics or repairs', () => {
+  it('locks the scenario after SIGKILL before SIGTERM and never accepts a later process check', () => {
     const session = sessionFor('linux-runaway-process')
     session.execute('top')
     session.execute('ps -o pid,ppid,stat,cmd -p 3912')
-    session.execute('kill -9 3912')
+    const unsafeKill = session.execute('kill -9 3912')
+    const laterCheck = session.execute('ps -p 3912')
     const score = session.evaluator.getScore()
     expect(score.dangerousActions).toBe(1)
     expect(score.isResolved).toBe(false)
-    expect(session.evaluator.getActions()[2]).toMatchObject({ dangerous: true, changedState: true })
+    expect(unsafeKill.result.tags).not.toContain('resolve:process')
+    expect(laterCheck.result.isError).toBe(true)
+    expect(session.evaluator.getActions()[2]).toMatchObject({ dangerous: true, changedState: true, blocksResolution: true })
   })
 
   it.each([
